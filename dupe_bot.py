@@ -7,11 +7,14 @@ from datetime import datetime, timedelta
 # ==============================
 # CONFIGURATION
 # ==============================
-BOT_TOKEN = 8290690728:AAH-ignGcVkF0fM6-oWsidU9qFx6snSjzYo
-DB_PATH = dupe_entries.db
+import os
+import telebot
+
+BOT_TOKEN = os.environ.get("8500936015:AAHmkreA99cbgRxpDDGiDBxprlNu5t7ZUTw")
+if not BOT_TOKEN:
+    raise ValueError("❌ TELEGRAM_TOKEN environment variable is not set.")
 
 bot = telebot.TeleBot(BOT_TOKEN)
-
 # ==============================
 # DATABASE SETUP
 # ==============================
