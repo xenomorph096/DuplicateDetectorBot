@@ -1,2 +1,6 @@
-pyTelegramBotAPI==4.11.0
+HEAD
+
 Flask==2.3.3
+telebot==4.10.0
+
+14d28abcd5cce37f91c6ac6f695951c6e2cffea0
