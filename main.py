@@ -1,16 +1,33 @@
-import telebot
+import os
 import sqlite3
 import time
 import re
+import logging
 from datetime import datetime, timedelta
+import telebot
+from flask import Flask
+import threading
 
 # ==============================
 # CONFIGURATION
 # ==============================
-BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"  # <-- replace with your actual bot token
-DB_PATH = "dupe_entries.db"
+BOT_TOKEN = os.getenv("8500936015:AAHmkreA99cbgRxpDDGiDBxprlNu5t7ZUTw")
+if not BOT_TOKEN:
+    raise ValueError("❌ TELEGRAM_TOKEN environment variable is not set.")
+
+DATA_DIR = "data"
+DB_PATH = os.path.join(DATA_DIR, "dupe_entries.db")
+os.makedirs(DATA_DIR, exist_ok=True)
 
 bot = telebot.TeleBot(BOT_TOKEN)
+
+# ==============================
+# LOGGING
+# ==============================
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+)
 
 # ==============================
 # DATABASE SETUP
@@ -53,9 +70,6 @@ def normalize_phone(p):
         p = '+' + p
     return p
 
-def is_recent(ts):
-    return datetime.now() - datetime.fromtimestamp(ts) < timedelta(hours=24)
-
 def detect_value_type(text):
     text = text.strip()
     if text.startswith("@"):
@@ -80,13 +94,16 @@ def detect_value_type(text):
 def handle_start(message):
     bot.reply_to(
         message,
-        "👋 Welcome! Send me a phone number or @username to check if it's a duplicate.\n"
-        "I'll tell you if it's already in the database or recently added.\n\n"
-        "欢迎！发送电话号码或@用户名来检测是否重复。"
+        "👋 Welcome! Send me a phone number or @username to check for duplicates.\n"
+        "I'll tell you if it's already in the database or recently added."
     )
 
-@bot.message_handler(func=lambda m: True)
+@bot.message_handler(func=lambda m: True, content_types=['text'])
 def handle_input(message):
+    # Ignore messages from channels
+    if message.chat.type == "channel":
+        return
+
     raw = message.text.strip()
     user = message.from_user
     chat_id = message.chat.id
@@ -94,13 +111,13 @@ def handle_input(message):
     value_type, norm = detect_value_type(raw)
 
     if value_type == "invalid_username":
-        bot.reply_to(message, "⚠️ Invalid Username Format | 用户名格式无效\nUsernames must start with @\n用户名必须以@开头")
+        bot.reply_to(message, "⚠️ Invalid Username Format. Usernames must start with @.")
         return
     if value_type == "invalid_phone":
-        bot.reply_to(message, "⚠️ Invalid Phone Format | 电话号码格式无效")
+        bot.reply_to(message, "⚠️ Invalid Phone Format.")
         return
     if not value_type:
-        bot.reply_to(message, "❌ I didn’t detect a valid @username or phone number.\n未检测到有效的用户名或电话号码。")
+        bot.reply_to(message, "❌ No valid @username or phone number detected.")
         return
 
     # Check if already exists
@@ -114,11 +131,12 @@ def handle_input(message):
         original_time = datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
         bot.reply_to(
             message,
-            f"⚠️ Duplicate Detected | 检测到重复\n"
+            f"⚠️ Duplicate Detected\n"
             f"{'Username' if value_type=='username' else 'Number'}: {raw}\n"
             f"Originally added by: {submitter_username or 'Unknown'}\n"
             f"Time: {original_time}"
         )
+        logging.info(f"Duplicate detected: {raw} by {user.username}")
         return
 
     # Insert new record
@@ -139,11 +157,29 @@ def handle_input(message):
     added_time = datetime.fromtimestamp(now_ts).strftime("%Y-%m-%d %H:%M:%S")
     bot.reply_to(
         message,
-        f"✅ Successfully Added | 添加成功\n"
+        f"✅ Successfully Added\n"
         f"{'Username' if value_type=='username' else 'Number'}: {raw}\n"
         f"Added by: {user.username or 'Unknown'}\n"
         f"Time: {added_time}"
     )
+    logging.info(f"Added: {raw} by {user.username}")
 
-print("🤖 Bot is running on Replit...")
+# ==============================
+# FLASK PING FOR UPTIMEROBOT
+# ==============================
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "Bot is running!"
+
+def run_flask():
+    app.run(host="0.0.0.0", port=10000)
+
+threading.Thread(target=run_flask).start()
+
+# ==============================
+# RUN BOT
+# ==============================
+logging.info("🤖 Bot is starting...")
 bot.infinity_polling()
